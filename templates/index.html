@@ -55,32 +55,6 @@
         let currentJobId = null;
         let pollInterval = null;
 
-        function fileLink(jobId, path, title) {
-            // server kirim path lengkap (downloads/<job_id>_<judul>.mp3);
-            // endpoint /file/<job_id>/<nama> menambah prefix job_id sendiri -> strip dulu
-            let name = path.split('/').pop();
-            const prefix = jobId + '_';
-            if (name.startsWith(prefix)) name = name.slice(prefix.length);
-            const url = `/file/${jobId}/${encodeURIComponent(name)}`;
-            const safe = title.replace(/'/g, '&#39;');
-            // ponytail: showSaveFilePicker = Chromium only; <a download> fallback for the rest
-            if (window.showSaveFilePicker) {
-                return `<a href="${url}" download>Download</a><button onclick="saveAs('${url}','${safe}')">Pilih folder…</button>`;
-            }
-            return `<a href="${url}" download>Download</a>`;
-        }
-
-        async function saveAs(url, filename) {
-            try {
-                const handle = await window.showSaveFilePicker({ suggestedName: filename });
-                const writable = await handle.createWritable();
-                const res = await fetch(url);
-                await res.body.pipeTo(writable);
-            } catch (e) {
-                if (e.name !== 'AbortError') alert('Gagal menyimpan: ' + e.message);
-            }
-        }
-
         async function startDownload() {
             const url = document.getElementById('urlInput').value.trim();
             const format = document.getElementById('formatSelect').value;
@@ -141,12 +115,9 @@
                     btn.disabled = false;
                     btn.textContent = 'Download Lagi';
                     
-                    if (data.file) {
-                        result.innerHTML = `<strong>✓ ${data.title}</strong><br>${fileLink(currentJobId, data.file, data.title)}`;
-                    } else if (data.results) {
-                        result.innerHTML = data.results.map(r => 
-                            `<hr style="border-color:#333;margin:0.5rem 0;"><strong>✓ ${r.title}</strong><br>${fileLink(currentJobId, r.file, r.title)}`
-                        ).join('');
+                    if (data.zip) {
+                        const url = `/zip/${currentJobId}`;
+                        result.innerHTML = `<strong>✓ ${data.count} file siap</strong><br><a href="${url}" download="${currentJobId}.zip">Download ZIP (${data.count} lagu)</a>`;
                     }
                     result.classList.add('show');
                 } else if (data.status === 'error') {
