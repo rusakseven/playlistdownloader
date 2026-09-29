@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YT Music / Spotify Downloader</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2rem; }
+        .container { width: 100%; max-width: 600px; }
+        h1 { text-align: center; margin-bottom: 1.5rem; color: #fff; }
+        .input-group { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+        input[type="url"] { flex: 1; padding: 0.75rem; border: 1px solid #333; background: #222; color: #eee; border-radius: 4px; font-size: 1rem; }
+        select { padding: 0.75rem; border: 1px solid #333; background: #222; color: #eee; border-radius: 4px; }
+        button { width: 100%; padding: 0.75rem; background: #1db954; color: #fff; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #1ed760; }
+        button:disabled { background: #444; cursor: not-allowed; }
+        #status { margin-top: 1rem; padding: 1rem; background: #222; border-radius: 4px; min-height: 100px; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap; }
+        .progress-bar { height: 4px; background: #333; border-radius: 2px; overflow: hidden; margin: 0.5rem 0; }
+        .progress-fill { height: 100%; background: #1db954; width: 0%; transition: width 0.3s; }
+        .result { margin-top: 1rem; padding: 1rem; background: #1a3a2a; border-radius: 4px; display: none; }
+        .result.show { display: block; }
+        .result a { color: #1db954; text-decoration: none; }
+        .result a:hover { text-decoration: underline; }
+        .error { background: #3a1a1a; color: #ff6b6b; }
+        @media (max-width: 480px) {
+            .input-group { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 YT Music / Spotify Downloader</h1>
+        <div class="input-group">
+            <input type="url" id="urlInput" placeholder="Paste YouTube/YouTube Music/Spotify URL (playlist, album, track)" required>
+        </div>
+        <div class="input-group">
+            <select id="formatSelect">
+                <option value="mp3">MP3 (192kbps)</option>
+                <option value="m4a">M4A</option>
+                <option value="opus">OPUS</option>
+            </select>
+        </div>
+        <button id="downloadBtn" onclick="startDownload()">Download</button>
+        
+        <div id="status">Menunggu URL...</div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let pollInterval = null;
+
+        async function startDownload() {
+            const url = document.getElementById('urlInput').value.trim();
+            const format = document.getElementById('formatSelect').value;
+            const btn = document.getElementById('downloadBtn');
+            const status = document.getElementById('status');
+            const progressFill = document.getElementById('progressFill');
+            const result = document.getElementById('result');
+
+            if (!url) return alert('Masukkan URL terlebih dahulu');
+
+            btn.disabled = true;
+            btn.textContent = 'Memproses...';
+            status.textContent = 'Mengirim request...';
+            progressFill.style.width = '10%';
+            result.classList.remove('show', 'error');
+            result.innerHTML = '';
+
+            try {
+                const formData = new FormData();
+                formData.append('url', url);
+                formData.append('format', format);
+
+                const res = await fetch('/download', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.job_id) {
+                    currentJobId = data.job_id;
+                    pollStatus();
+                } else {
+                    throw new Error('Gagal memulai download');
+                }
+            } catch (e) {
+                status.textContent = 'Error: ' + e.message;
+                btn.disabled = false;
+                btn.textContent = 'Download';
+            }
+        }
+
+        async function pollStatus() {
+            const status = document.getElementById('status');
+            const progressFill = document.getElementById('progressFill');
+            const btn = document.getElementById('downloadBtn');
+            const result = document.getElementById('result');
+
+            try {
+                const res = await fetch(`/status/${currentJobId}`);
+                const data = await res.json();
+
+                if (data.status === 'running') {
+                    status.textContent = 'Downloading... (ini bisa memakan waktu beberapa menit untuk playlist)';
+                    progressFill.style.width = '50%';
+                } else if (data.status === 'done') {
+                    clearInterval(pollInterval);
+                    progressFill.style.width = '100%';
+                    status.textContent = 'Selesai!';
+                    btn.disabled = false;
+                    btn.textContent = 'Download Lagi';
+                    
+                    if (data.file) {
+                        result.innerHTML = `<strong>✓ ${data.title}</strong><br><a href="/file/${currentJobId}/${encodeURIComponent(data.file.split('/').pop())}" download>Download file</a>`;
+                    } else if (data.results) {
+                        result.innerHTML = data.results.map(r => 
+                            `<strong>✓ ${r.title}</strong><br><a href="/file/${currentJobId}/${encodeURIComponent(r.file.split('/').pop())}" download>Download</a>`
+                        ).join('<hr style="border-color:#333;margin:0.5rem 0;">');
+                    }
+                    result.classList.add('show');
+                } else if (data.status === 'error') {
+                    clearInterval(pollInterval);
+                    status.textContent = 'Error: ' + data.error;
+                    result.textContent = data.error;
+                    result.classList.add('show', 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Download';
+                } else {
+                    status.textContent = 'Status tidak diketahui: ' + JSON.stringify(data);
+                }
+            } catch (e) {
+                status.textContent = 'Poll error: ' + e.message;
+            }
+        }
+    </script>
+</body>
+</html>
