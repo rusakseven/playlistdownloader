@@ -23,6 +23,8 @@
         .result a { color: #1db954; text-decoration: none; }
         .result a:hover { text-decoration: underline; }
         .error { background: #3a1a1a; color: #ff6b6b; }
+        #result button { width: auto; display: inline-block; margin-left: 0.5rem; padding: 0.4rem 0.8rem; font-size: 0.85rem; background: #2a2a2a; }
+        #result button:hover { background: #3a3a3a; }
         @media (max-width: 480px) {
             .input-group { flex-direction: column; }
         }
@@ -52,6 +54,28 @@
     <script>
         let currentJobId = null;
         let pollInterval = null;
+
+        function fileLink(jobId, path, title) {
+            const name = path.split('/').pop();
+            const url = `/file/${jobId}/${encodeURIComponent(name)}`;
+            const safe = title.replace(/'/g, '&#39;');
+            // ponytail: showSaveFilePicker = Chromium only; <a download> fallback for the rest
+            if (window.showSaveFilePicker) {
+                return `<a href="${url}" download>Download</a><button onclick="saveAs('${url}','${safe}')">Pilih folder…</button>`;
+            }
+            return `<a href="${url}" download>Download</a>`;
+        }
+
+        async function saveAs(url, filename) {
+            try {
+                const handle = await window.showSaveFilePicker({ suggestedName: filename });
+                const writable = await handle.createWritable();
+                const res = await fetch(url);
+                await res.body.pipeTo(writable);
+            } catch (e) {
+                if (e.name !== 'AbortError') alert('Gagal menyimpan: ' + e.message);
+            }
+        }
 
         async function startDownload() {
             const url = document.getElementById('urlInput').value.trim();
@@ -114,11 +138,11 @@
                     btn.textContent = 'Download Lagi';
                     
                     if (data.file) {
-                        result.innerHTML = `<strong>✓ ${data.title}</strong><br><a href="/file/${currentJobId}/${encodeURIComponent(data.file.split('/').pop())}" download>Download file</a>`;
+                        result.innerHTML = `<strong>✓ ${data.title}</strong><br>${fileLink(currentJobId, data.file, data.title)}`;
                     } else if (data.results) {
                         result.innerHTML = data.results.map(r => 
-                            `<strong>✓ ${r.title}</strong><br><a href="/file/${currentJobId}/${encodeURIComponent(r.file.split('/').pop())}" download>Download</a>`
-                        ).join('<hr style="border-color:#333;margin:0.5rem 0;">');
+                            `<hr style="border-color:#333;margin:0.5rem 0;"><strong>✓ ${r.title}</strong><br>${fileLink(currentJobId, r.file, r.title)}`
+                        ).join('');
                     }
                     result.classList.add('show');
                 } else if (data.status === 'error') {
