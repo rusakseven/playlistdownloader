@@ -3,6 +3,5 @@ downloads/
 __pycache__/
 *.pyc
 .env
-.env.example
 .tunnel-url
 .DS_Store
