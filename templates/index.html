@@ -81,6 +81,7 @@
                 if (data.job_id) {
                     currentJobId = data.job_id;
                     pollStatus();
+                    pollInterval = setInterval(pollStatus, 1000);
                 } else {
                     throw new Error('Gagal memulai download');
                 }
@@ -102,8 +103,9 @@
                 const data = await res.json();
 
                 if (data.status === 'running') {
-                    status.textContent = 'Downloading... (ini bisa memakan waktu beberapa menit untuk playlist)';
-                    progressFill.style.width = '50%';
+                    const pct = data.progress || 0;
+                    progressFill.style.width = pct + '%';
+                    status.textContent = `Downloading... ${pct.toFixed(1)}%${data.title ? ' — ' + data.title : ''}`;
                 } else if (data.status === 'done') {
                     clearInterval(pollInterval);
                     progressFill.style.width = '100%';

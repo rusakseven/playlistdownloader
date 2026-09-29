@@ -22,6 +22,21 @@ jobs = {}
 
 def download_youtube(url: str, job_id: str, format: str = "mp3"):
     try:
+        def hook(d):
+            # ponytail: current-item percent; combined w/ playlist position for overall
+            info = d.get('info_dict') or {}
+            n = info.get('n_entries') or 1
+            idx = info.get('playlist_index') or 1
+            if d['status'] == 'downloading':
+                total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
+                done = d.get('downloaded_bytes') or 0
+                frac = done / total if total else 0
+                pct = ((idx - 1 + frac) / n) * 100
+                # ponytail: clamp to 99; 100 only when the job is actually done (post-processing runs after download)
+                jobs[job_id].update(progress=min(round(pct, 1), 99.0), title=info.get('title', ''))
+            elif d['status'] == 'finished':
+                jobs[job_id].update(progress=min(round(idx / n * 100, 1), 99.0))
+
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': str(DOWNLOAD_DIR / f'{job_id}_%(title)s.%(ext)s'),
@@ -32,6 +47,7 @@ def download_youtube(url: str, job_id: str, format: str = "mp3"):
             }],
             'quiet': True,
             'no_warnings': True,
+            'progress_hooks': [hook],
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -55,7 +71,8 @@ def download_spotify(url: str, job_id: str, format: str = "mp3"):
             return {"status": "error", "error": "No songs found"}
         
         results = []
-        for song in songs:
+        for i, song in enumerate(songs, 1):
+            jobs[job_id].update(progress=round((i - 1) / len(songs) * 100, 1), title=song.title)
             spotdl_client.download_song(song)
             # spotdl saves to current dir, find the file
             for f in Path(".").glob(f"*{song.title}*.{format}"):
