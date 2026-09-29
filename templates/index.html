@@ -56,7 +56,11 @@
         let pollInterval = null;
 
         function fileLink(jobId, path, title) {
-            const name = path.split('/').pop();
+            // server kirim path lengkap (downloads/<job_id>_<judul>.mp3);
+            // endpoint /file/<job_id>/<nama> menambah prefix job_id sendiri -> strip dulu
+            let name = path.split('/').pop();
+            const prefix = jobId + '_';
+            if (name.startsWith(prefix)) name = name.slice(prefix.length);
             const url = `/file/${jobId}/${encodeURIComponent(name)}`;
             const safe = title.replace(/'/g, '&#39;');
             // ponytail: showSaveFilePicker = Chromium only; <a download> fallback for the rest
